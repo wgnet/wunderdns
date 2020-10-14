@@ -1,0 +1,7 @@
+/bin
+/.idea
+**/*.sh
+**/*.py
+**/*.tar.gz
+**/*.ini
+pdns/
