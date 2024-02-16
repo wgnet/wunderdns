@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,16 +17,17 @@ import (
 	"crypto"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"github.com/wgnet/wunderdns/wunderdns"
+	"net/http"
 	"strings"
 	"time"
 )
 
 var endpoints = map[string]func(http.ResponseWriter, *http.Request){
-	"/ping":   apiPingFunc,
-	"/domain": apiDomainFunc,
-	"/record": apiRecordFunc,
+	"/ping":    apiPingFunc,
+	"/domain":  apiDomainFunc,
+	"/record":  apiRecordFunc,
+	"/migrate": apiMigrateFunc,
 }
 
 func writeJson(w http.ResponseWriter, r *http.Request, data interface{}) {
@@ -115,7 +116,10 @@ func mergeReply(reply ...*wunderdns.WunderReply) *wunderdns.WunderReply {
 				if _, ok := retmap[k]; !ok { // not exists ( normal )
 					retmap[k] = v
 				} else {
-					retmap[fmt.Sprintf("%s@%p", k, &k)] = v
+					newA := make([]interface{}, 0)
+					newA = append(newA, retmap[k])
+					newA = append(newA, v)
+					retmap[k] = newA
 				}
 			}
 		}

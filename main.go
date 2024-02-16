@@ -15,10 +15,10 @@ package main
 
 import (
 	"flag"
+	"github.com/wgnet/wunderdns/httpapi"
+	"github.com/wgnet/wunderdns/wunderdns"
 	"log"
 	"os"
-	"github.com/wgnet/wunderdns/wunderdns"
-	"github.com/wgnet/wunderdns/httpapi"
 )
 
 func main() {
@@ -27,9 +27,10 @@ func main() {
 	runApi := flag.Bool("api", true, "Run API server")
 	runWunder := flag.Bool("wunder", true, "Run WunderDNS server")
 	loglevel := flag.Int("loglevel", 3, "Loglevel: 0-5, more >> more logs")
+	orm := flag.Bool("orm", true, "Enable ORM instead of SQL [deprecated]")
 	flag.Parse()
-	if *loglevel >= 0 && *loglevel <= 5 {
-		wunderdns.SetLogLevel(*loglevel)
+	if *orm {
+		wunderdns.EnableOrm()
 	}
 	if *runApi && *runWunder {
 		go func() {
@@ -40,6 +41,10 @@ func main() {
 			}
 		}()
 		wunderdns.NewConfig(*configFile)
+		if *loglevel >= 0 && *loglevel <= 5 && *loglevel != 3 {
+			wunderdns.SetLogLevel(*loglevel) // override config
+		}
+
 		wunderdns.Run()
 	} else if *runApi {
 		e := httpapi.StartAPI(*apiConfig)
@@ -48,6 +53,9 @@ func main() {
 		}
 	} else if *runWunder {
 		wunderdns.NewConfig(*configFile)
+		if *loglevel >= 0 && *loglevel <= 5 && *loglevel != 3 {
+			wunderdns.SetLogLevel(*loglevel) // override config
+		}
 		wunderdns.Run()
 	}
 }

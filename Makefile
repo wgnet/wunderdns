@@ -1,3 +1,5 @@
+export GO111MODULE=on
+export GOFLAGS=-mod=vendor
 all:
 	mkdir -p bin
 	go test github.com/wgnet/wunderdns/wunderdns

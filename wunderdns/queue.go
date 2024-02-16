@@ -169,22 +169,33 @@ func processMessage(message *amqp.Delivery, key string) {
 		replyError(message, key, "security: ", e.Error())
 		return
 	}
-	if e := checkRFCRequest(req); e != nil {
-		replyError(message, key, "rfc1034: ", e.Error())
-		return
+	switch req.Cmd {
+	case CommandReplaceOwner:
+
+	default:
+		if e := checkRFCRequest(req); e != nil {
+			replyError(message, key, "rfc1034: ", e.Error())
+			return
+		}
 	}
+
 	logging.Trace(fmt.Sprintf("Got request (%s) from %s/%s", req.Cmd, message.ReplyTo, message.CorrelationId))
 	switch req.Cmd {
-	case CommandListRecords, CommandListDomains, CommandListOwn:
-		d, e := applyCommandMerge(req)
+	case CommandListRecords, CommandListDomains, CommandListOwn, CommandSearchRecord:
+		var data map[DomainView][]interface{}
+		var e error
+		data, e = ormApplyCommandMerge(req)
 		if e != nil {
 			replyError(message, key, "sql: ", e.Error())
 		} else {
-			replySuccessData(message, key, d)
+			replySuccessData(message, key, data)
 		}
 		break
 	default:
-		if n, e := applyCommand(req); e != nil {
+		var n int
+		var e error
+		n, e = ormApplyCommand(req)
+		if e != nil {
 			replyError(message, key, "sql: ", e.Error())
 			return
 		} else {

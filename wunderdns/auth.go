@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,11 +22,17 @@ import (
 )
 
 func securityProcessRequest(request *WunderRequest) error {
+	authDataLock.RLock()
+	defer authDataLock.RUnlock()
+	if request == nil || request.Auth == nil || request.Domain == nil {
+		return errors.New("[auth] invalid (null) request")
+	}
 	if !globalConfig.Auth.checkAuthentication(request) {
-		return errors.New("invalid authentication header")
+		return errors.New(fmt.Sprintf("[auth] %s - invalid token/secret", request.Auth.Token))
 	}
 	if !globalConfig.Auth.isPermitted(request) {
-		return errors.New("permission denied")
+		return errors.New(fmt.Sprintf("[auth] %s @ %s -> %s/%s - permission denied", request.Auth.Token, request.Cmd, request.Domain.Name,
+			request.Domain.View))
 	}
 	return nil
 }
@@ -75,15 +81,15 @@ func (authDatabase *AuthDatabase) isPermitted(request *WunderRequest) bool {
  */
 func (authDatabase *AuthDatabase) checkAuthentication(request *WunderRequest) bool {
 	if request.Auth == nil {
-		logging.Debug("No auth")
+		logging.Debug("[auth] auth header is null")
 		return false
 	}
 	if request.Auth.Token == "" || request.Auth.Sum == "" {
-		logging.Debug("No auth token")
+		logging.Debug("[auth] auth token is null")
 		return false
 	}
 	if v, ok := (*authDatabase)[request.Auth.Token]; !ok {
-		logging.Debug("Auth token not found")
+		logging.Debug("[auth] token not found in database: ", request.Auth.Token)
 		return false
 	} else {
 		for shift := -900; shift <= 900; shift += 30 {
@@ -96,7 +102,19 @@ func (authDatabase *AuthDatabase) checkAuthentication(request *WunderRequest) bo
 			}
 		}
 	}
+	logging.Debug("[auth] invalid hash for token: ", request.Auth.Token)
 	return false
+}
+
+func (authDatabase *AuthDatabase) checkIfCanMigrate(request *WunderRequest) error {
+	if request.NewToken != "" {
+		if _, ok := (*authDatabase)[request.NewToken]; !ok {
+			return errors.New("new token doesn't exist in our database")
+		}
+	} else {
+		return errors.New("new token is empty")
+	}
+	return nil
 }
 
 func createVariodicHash(request *WunderRequest, shift int) string {

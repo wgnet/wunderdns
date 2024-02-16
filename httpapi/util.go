@@ -16,8 +16,8 @@ package httpapi
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"github.com/wgnet/wunderdns/wunderdns"
+	"net/http"
 	"strconv"
 )
 
@@ -40,6 +40,23 @@ func any2int(v interface{}) int {
 	}
 	return 0
 }
+func any2string(any interface{}) string {
+	switch any.(type) {
+	case string:
+		return any.(string)
+	default:
+		return fmt.Sprintf("%v", any)
+
+	}
+}
+
+func any2strings(any []interface{}) []string {
+	ret := make([]string, len(any))
+	for i := 0; i < len(any); i++ {
+		ret[i] = any2string(any[i])
+	}
+	return ret
+}
 
 func record2record(record map[string]interface{}) []*wunderdns.Record {
 	ret := make([]*wunderdns.Record, 0)
@@ -56,10 +73,10 @@ func record2record(record map[string]interface{}) []*wunderdns.Record {
 		switch data.(type) {
 		case []string:
 			one.Data = append(one.Data, data.([]string)...)
-			break
 		case string:
 			one.Data = append(one.Data, data.(string))
-			break
+		case []interface{}:
+			one.Data = append(one.Data, any2strings(data.([]interface{}))...)
 		}
 		ret = append(ret, one)
 	}

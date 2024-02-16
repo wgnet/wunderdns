@@ -17,9 +17,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/asaskevich/govalidator"
+	"github.com/wgnet/wunderdns/wunderdns"
 	"log"
 	"net/http"
-	"github.com/wgnet/wunderdns/wunderdns"
 )
 
 func apiRecordFunc(w http.ResponseWriter, r *http.Request) {
@@ -32,6 +32,14 @@ func apiRecordFunc(w http.ResponseWriter, r *http.Request) {
 	} else {
 		switch r.Method {
 		case http.MethodGet:
+			if _, ok := r.URL.Query()["search"]; ok {
+				if record := r.FormValue("record"); record != "" {
+					writeJson(w, r, apiSearchRecords(token, secret, r.FormValue("record"), pretty))
+				} else {
+					writeJsonE(w, r, 422, "record parameter is missing")
+				}
+				return
+			}
 			if _, ok := r.URL.Query()["own"]; ok {
 				writeJson(w, r, apiListOwnRecords(token, secret, pretty))
 				return
@@ -291,6 +299,22 @@ func apiListOwnRecords(token, secret string, pretty bool) *wunderdns.WunderReply
 		Domain: &wunderdns.Domain{
 			Name: wunderdns.DomainNameAny,
 			View: wunderdns.DomainViewAny,
+		},
+		Pretty: pretty,
+	}
+	return signAndPush(req, token, secret)
+}
+func apiSearchRecords(token, secret string, record string, pretty bool) *wunderdns.WunderReply {
+	req := &wunderdns.WunderRequest{
+		Cmd: wunderdns.CommandSearchRecord,
+		Domain: &wunderdns.Domain{
+			Name: "",
+			View: wunderdns.DomainViewAny,
+		},
+		Record: []*wunderdns.Record{
+			&wunderdns.Record{
+				Name: record,
+			},
 		},
 		Pretty: pretty,
 	}

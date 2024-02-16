@@ -17,14 +17,17 @@ import (
 	"fmt"
 	"gopkg.in/go-ini/ini.v1"
 	"strings"
+	"time"
 )
 
 var globalConfig = new(Config)
 
 var configMap = map[string]func(*ini.Section){
-	"amqp":    amqpSection,
-	"auth":    authSection,
-	"psql":    psqlSection,
+	"amqp":             amqpSection,
+	"auth":             authSection,
+	"psql":             psqlSection,
+	"vault":            vaultSection,
+	ini.DefaultSection: defaultSection,
 }
 
 func NewConfig(configFile string) {
@@ -40,7 +43,7 @@ func parseConfigFile(configFile string) error {
 	}
 	if f, e := ini.Load(configFile); e == nil {
 		for k, fu := range configMap {
-			f.NewSection(k)
+			_, _ = f.NewSection(k)
 			if s, e := f.GetSection(k); e == nil {
 				fu(s)
 			}
@@ -63,7 +66,54 @@ func includeSection(s *ini.Section) {
 	}
 }
 
+// config sample
+func vaultSection(s *ini.Section) {
+	if globalConfig.Vault == nil {
+		globalConfig.Vault = &VaultData{
+			Enabled: false,
+			URL:     "",
+			Token:   "",
+			TTL:     10 * time.Minute,
+		}
+	}
+	if len(s.Keys()) == 0 {
+		return
+	}
+	if k, e := s.GetKey("enable"); e == nil {
+		if globalConfig.Vault.Enabled, e = k.Bool(); e == nil && globalConfig.Vault.Enabled {
+			logging.Debug("[vault] vault auth integration have been enabled")
+		}
+	}
+	if k, e := s.GetKey("url"); e == nil {
+		globalConfig.Vault.URL = k.String()
+	}
+	if k, e := s.GetKey("token"); e == nil {
+		globalConfig.Vault.Token = k.String()
+	}
+	if k, e := s.GetKey("ttl"); e == nil {
+		if globalConfig.Vault.TTL, e = k.Duration(); e != nil {
+			globalConfig.Vault.TTL = 10 * time.Minute
+		}
+		logging.Debug("[vault] vault refresh time is set to ", globalConfig.Vault.TTL.Seconds(), " seconds")
+	}
+
+}
+
+func defaultSection(s *ini.Section) {
+	if s.HasKey("loglevel") {
+		if k, e := s.GetKey("loglevel"); e == nil {
+			if i, e := k.Int(); e == nil {
+				if i >= 0 && i <= 5 {
+					SetLogLevel(i)
+				}
+			}
+		}
+	}
+}
+
 func authSection(s *ini.Section) {
+	authDataLock.Lock()
+	defer authDataLock.Unlock()
 	if globalConfig.Auth == nil {
 		v := make(AuthDatabase)
 		globalConfig.Auth = &v
@@ -72,6 +122,7 @@ func authSection(s *ini.Section) {
 		a := AuthData{
 			Token:       strings.TrimPrefix(sub.Name(), "auth."),
 			Permissions: make([]Permission, 0),
+			isVault:     false,
 		}
 		if sub.HasKey("secret") {
 			a.Secret = sub.Key("secret").String()

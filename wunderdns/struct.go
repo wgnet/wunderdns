@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,9 +13,18 @@
 // limitations under the License.
 package wunderdns
 
+import (
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+)
+
 type Command string
 type DomainView string
 type RecordType string
+
+type RecordsType []*Record
 
 const (
 	CommandCreateDomain  Command = "create_domain"
@@ -25,6 +34,8 @@ const (
 	CommandListRecords   Command = "list_records"
 	CommandListOwn       Command = "list_own"
 	CommandListDomains   Command = "list_domains"
+	CommandSearchRecord  Command = "search_record"
+	CommandReplaceOwner  Command = "replace_owner"
 	CommandAny           Command = "*"
 )
 
@@ -60,6 +71,8 @@ var commands = map[Command]bool{
 	CommandCreateDomain:  true,
 	CommandListDomains:   true,
 	CommandReplaceRecord: true,
+	CommandSearchRecord:  true,
+	CommandReplaceOwner:  true,
 }
 
 var recordTypes = map[RecordType]bool{
@@ -77,11 +90,12 @@ var recordTypes = map[RecordType]bool{
 const DomainNameAny string = "*"
 
 type WunderRequest struct {
-	Auth   *AuthHeader `json:"a"`
-	Cmd    Command     `json:"c"`
-	Domain *Domain     `json:"d"`
-	Record []*Record   `json:"r"`
-	Pretty bool        `json:"p"`
+	Auth     *AuthHeader `json:"a"`
+	Cmd      Command     `json:"c"`
+	Domain   *Domain     `json:"d"`
+	Record   []*Record   `json:"r"`
+	NewToken string      `json:"n"`
+	Pretty   bool        `json:"p"`
 }
 
 type WunderReply struct {
@@ -128,17 +142,27 @@ type AuthData struct {
 	Secret      string
 	Permissions []Permission
 	Priority    int
+	isVault     bool
 }
+
+var authDataLock = sync.RWMutex{}
 
 type Permission struct {
 	Domain    Domain
 	Permitted []Command
 }
 
+type VaultData struct {
+	Enabled bool
+	URL     string
+	Token   string
+	TTL     time.Duration
+}
 type Config struct {
 	AMQPConfigs []*AMQPConfig
 	PSQLConfigs []*PSQLConfig
 	Auth        *AuthDatabase
+	Vault       *VaultData
 }
 
 type AMQPConfig struct {
@@ -154,4 +178,47 @@ type PSQLConfig struct {
 	Database string
 	SSL      bool
 	View     DomainView
+}
+
+func (r *WunderRequest) toString() string {
+	return fmt.Sprintf("auth: %s; command: %s; domain %s; record: %s",
+		r.Auth.toString(),
+		r.Cmd,
+		r.Domain.toString(),
+		RecordsType(r.Record).toString(),
+	)
+}
+
+func (r *AuthHeader) toString() string {
+	if r == nil {
+		return "[nil]"
+	}
+	return fmt.Sprintf("[token:%s]", r.Token)
+}
+
+func (d *Domain) toString() string {
+	if d == nil {
+		return "[nil]"
+	}
+	return fmt.Sprintf("[view:%s/name:%s]", d.View, d.Name)
+}
+
+func (r RecordsType) toString() string {
+	if r == nil {
+		return "[nil]"
+	}
+	ret := make([]string, 0)
+	for _, rec := range r {
+		if rec == nil {
+			ret = append(ret, "[nil]")
+		} else {
+			ret = append(ret, rec.toString())
+		}
+
+	}
+	return fmt.Sprintf("[%s]", strings.Join(ret, ","))
+}
+
+func (r *Record) toString() string {
+	return fmt.Sprintf("[name:%s/type:%s/data:[%s]/ttl:%d]", r.Name, r.Type, strings.Join(r.Data, ";"), r.TTL)
 }

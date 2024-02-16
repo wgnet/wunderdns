@@ -13,11 +13,36 @@
 // limitations under the License.
 package wunderdns
 
+import "time"
+
 var checkChannel = make(chan bool, 2)
 
+var ormOrSql = false
+
 func Run() {
+	if globalConfig.Vault.Enabled {
+		// create vault sync first
+		if e := globalConfig.Auth.syncVaultData(); e != nil {
+			logging.Error("[vault] sync error; further sync is disabled: ", e.Error())
+			globalConfig.Vault.Enabled = false
+		}
+		if globalConfig.Vault.Enabled {
+			go func() {
+				for {
+					time.Sleep(globalConfig.Vault.TTL)
+					if e := globalConfig.Auth.syncVaultData(); e != nil {
+						logging.Warning("[vault] sync error: ", e.Error())
+					}
+				}
+			}()
+		}
+
+	}
 	// begin
-	initSQLs()
+	err := initORMs()
+	if err != nil {
+		logging.Fatal("initORMs error: ", err.Error())
+	}
 	i := 1
 	for _, c := range globalConfig.AMQPConfigs {
 		go func() {
@@ -38,4 +63,8 @@ func Run() {
 		}
 	}
 
+}
+
+func EnableOrm() {
+	ormOrSql = true
 }
